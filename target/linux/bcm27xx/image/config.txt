@@ -12,3 +12,4 @@ include distroconfig.txt
 
 [all]
 # Place your custom settings here.
+dtoverlay=noeee
