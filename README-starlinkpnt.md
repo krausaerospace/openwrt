@@ -1,16 +1,23 @@
 # Starlink → MAVLink bridge — image integration
 
 This buildroot produces the Pi 5 field-router image with the Starlink→MAVLink
-position bridge baked in and fully configured at first boot. App source of
-truth: `~/starlinkpnt` (see its `SETUP.md` for the FC-side ArduPilot checklist
-and how the bridge works).
+position bridge baked in and fully configured at first boot. The bridge app
+ships in `files/root/starlinkpnt/` (see the app's `SETUP.md` for the FC-side
+ArduPilot checklist and how the bridge works).
+
+Clone-and-build:
+
+```bash
+git clone https://github.com/krausaerospace/openwrt.git && cd openwrt
+./build.sh
+```
 
 ## Layout
 
 ```
-build.sh                                  image build (make)
+build.sh                                  image build (feeds + .config bootstrap, make)
 build_wheelhouse.sh                       aarch64/musl wheels for the bridge deps
-sync-starlinkpnt.sh                       pull latest app files from ~/starlinkpnt
+config-starlinkpnt.seed                   diffconfig seeding .config on fresh clones
 files/root/status.sh                      field verification ladder (WAN, ZT, bridge)
 files/root/starlinkpnt/                   bridge app + setup.sh + wheels/
 files/etc/uci-defaults/99-starlink-mavlink   first-boot hook (offline install + start)
@@ -23,17 +30,21 @@ files/etc/uci-defaults/99-gcs-netmap      gcsvpn firewall zone (any zt* iface)
 files/usr/share/nftables.d/               NETMAP zt<->lan: 10.222.x.y <-> 10.221.x.y
 ```
 
-`.config` already includes `python3`, `python3-pip`, `openssh-sftp-server`,
-`zerotier`. The feed's Python is **3.13** — if it ever bumps, rebuild the
-wheelhouse with a matching `PYTHON_TAG`.
+The seed config already includes `python3`, `python3-pip`,
+`openssh-sftp-server`, `zerotier`. The feed's Python is **3.13** — if it ever
+bumps, rebuild the wheelhouse with a matching `PYTHON_TAG`.
 
 ## Build
 
 ```bash
-./sync-starlinkpnt.sh        # after any change in ~/starlinkpnt
-./build_wheelhouse.sh        # after changing requirements-device.txt / Python bump
-./build.sh                   # make -j$(nproc)
+./build.sh                   # bootstraps feeds + .config on first run, then make
+./build_wheelhouse.sh        # only after changing requirements-device.txt / Python bump
 ```
+
+The wheelhouse output (`files/root/starlinkpnt/wheels/`) is committed, so a
+fresh clone builds fully offline-installable images without running
+`build_wheelhouse.sh`. After changing the image config via `make menuconfig`,
+refresh the committed seed: `./scripts/diffconfig.sh > config-starlinkpnt.seed`.
 
 The wheelhouse builder uses docker when available, else a no-emulation
 fallback (pip cross-download + host-built pure wheels) and verifies the

@@ -1,5 +1,15 @@
 *.o
 .DS_Store
+
+# Python venvs / caches
+.wheelhouse-venv/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Removed build-machine-specific helper scripts
+/sync-starlinkpnt.sh
 .*.swp
 /env
 /dl
@@ -13,7 +23,6 @@
 /logs
 /feeds
 /feeds.conf
-/files
 /target/linux/feeds
 /overlay
 /package/feeds
