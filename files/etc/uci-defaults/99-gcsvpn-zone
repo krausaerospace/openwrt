@@ -1,0 +1,16 @@
+#!/bin/sh
+# Zone for any ZeroTier interface (zt+ wildcard — the actual name depends
+# on the joined network ID, which isn't known at image build time). Input
+# is accepted so the router stays manageable (ssh/LuCI) over the VPN;
+# forwards are rejected.
+uci -q batch <<'EOF'
+set firewall.gcsvpn=zone
+set firewall.gcsvpn.name='gcsvpn'
+set firewall.gcsvpn.input='ACCEPT'
+set firewall.gcsvpn.output='ACCEPT'
+set firewall.gcsvpn.forward='REJECT'
+delete firewall.gcsvpn.device
+add_list firewall.gcsvpn.device='zt+'
+commit firewall
+EOF
+exit 0

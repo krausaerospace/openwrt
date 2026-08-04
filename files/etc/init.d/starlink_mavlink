@@ -1,0 +1,53 @@
+#!/bin/sh /etc/rc.common
+# Starlink->MAVLink bridge service. Maintained in the buildroot repo at
+# files/etc/init.d/starlink_mavlink and baked into the image. Never enabled
+# at boot (no rc.d symlink) — started only by starlink-start.
+# Configuration lives in /etc/config/starlink_mavlink (uci).
+
+START=99
+STOP=10
+USE_PROCD=1
+
+PROG_DIR=/root/starlinkpnt
+PROG=$PROG_DIR/starlink_mavlink.py
+
+append_starlink_addr() {
+	procd_append_param command --starlink-addr "$1"
+}
+
+append_discover_cidr() {
+	procd_append_param command --discover-cidr "$1"
+}
+
+start_service() {
+	local mavlink baud interval log_dir discover_port gps_input
+
+	config_load starlink_mavlink
+	config_get mavlink main mavlink 'auto'
+	config_get baud main baud '57600'
+	config_get interval main interval '2.0'
+	config_get log_dir main log_dir "$PROG_DIR/logs"
+	config_get discover_port main discover_port ''
+	config_get_bool gps_input main gps_input '0'
+
+	procd_open_instance
+	procd_set_param command /usr/bin/python3 "$PROG" \
+		--mavlink "$mavlink" --baud "$baud" --interval "$interval" \
+		--log-dir "$log_dir" --no-console
+	config_list_foreach main starlink_addr append_starlink_addr
+	config_list_foreach main discover_cidr append_discover_cidr
+	if [ -n "$discover_port" ]; then
+		procd_append_param command --discover-port "$discover_port"
+	fi
+	if [ "$gps_input" = 1 ]; then
+		procd_append_param command --gps-input
+	fi
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_set_param respawn 3600 5 5
+	procd_close_instance
+}
+
+service_triggers() {
+	procd_add_reload_trigger "starlink_mavlink"
+}

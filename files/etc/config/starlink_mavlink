@@ -1,0 +1,3 @@
+config starlink_mavlink 'main'
+	option mavlink 'auto'
+	option interval '2.0'

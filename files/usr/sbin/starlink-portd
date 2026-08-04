@@ -1,0 +1,55 @@
+#!/bin/sh
+# starlink-portd — keep WAN pointed at whichever USB port the dish is on.
+#
+# The dish may be plugged into either USB jack (jack1/jack2, pinned to
+# physical position by hotplug.d/net/05-usbnic-name), while the other
+# jack carries unrelated equipment (the 'aux' interface — Starlink
+# defaults to jack2). The dish is the only thing that ever
+# answers 192.168.100.1, so: while it is reachable through the current
+# config, do nothing; when it isn't, probe each port with a temporary
+# address and re-point wan/wan6/dishmgmt at the port that answers, giving
+# 'aux' the other one. Assignments are committed, so a unit settles on its
+# cabling across reboots. Aux equipment must never use 192.168.100.0/24 —
+# that subnet is what identifies the dish.
+DISH=192.168.100.1
+PROBE=192.168.100.3/24
+# eth1/eth2 as fallback candidates: if the jack-pinning hotplug script
+# ever misses (different carrier/USB topology), the dish is still found
+# under its raw kernel name; absent names are skipped.
+PORTS="jack1 jack2 eth1 eth2"
+
+probe() {
+    ip link set "$1" up 2>/dev/null
+    [ "$(cat "/sys/class/net/$1/carrier" 2>/dev/null)" = "1" ] || return 1
+    ip addr add "$PROBE" dev "$1" 2>/dev/null
+    ping -c1 -W2 -I "$1" "$DISH" >/dev/null 2>&1
+    rc=$?
+    ip addr del "$PROBE" dev "$1" 2>/dev/null
+    return $rc
+}
+
+while :; do
+    if ping -c1 -W2 "$DISH" >/dev/null 2>&1; then
+        sleep 30
+        continue
+    fi
+    for p in $PORTS; do
+        [ -e "/sys/class/net/$p" ] || continue
+        probe "$p" || continue
+        if [ "$p" != "$(uci -q get network.wan.device)" ]; then
+            other="jack1"
+            [ "$p" = "jack1" ] && other="jack2"
+            uci -q batch <<EOF
+set network.wan.device='$p'
+set network.wan6.device='$p'
+set network.dishmgmt.device='$p'
+set network.aux.device='$other'
+commit network
+EOF
+            ubus call network reload
+            logger -t starlink-portd "dish found on $p: wan -> $p, aux -> $other"
+        fi
+        break
+    done
+    sleep 5
+done

@@ -1,0 +1,5 @@
+uci -q del_list firewall.@zone[1].device='tun+'
+uci -q get firewall.@zone[0].device | tr ' ' '\n' | grep -qxF 'tun+' \
+    || uci add_list firewall.@zone[0].device='tun+'
+uci commit firewall
+exit 0

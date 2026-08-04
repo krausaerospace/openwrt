@@ -1,0 +1,65 @@
+#!/bin/sh
+# starlink-start — configure the FC target and start the Starlink->MAVLink
+# bridge. Maintained in the buildroot repo at files/usr/sbin/starlink-start
+# and baked into the image. The bridge does not autostart at boot; run this
+# after every reboot.
+#
+#   starlink-start 10.221.11.71          FC over UDP (default port 14550)
+#   starlink-start 10.221.11.71 14551    FC over UDP, custom port
+#   starlink-start /dev/ttyAMA10         FC over serial (default baud 921600)
+#   starlink-start /dev/ttyAMA10 57600   FC over serial, custom baud
+#   starlink-start auto                  scan the network for the FC
+#   starlink-start udpout:10.221.11.71:14550   full pymavlink string
+#   starlink-start                       reuse the last saved target
+
+usage() {
+    sed -n '/^#   starlink-start/s/^# *//p' "$0"
+    echo "stop with: starlink-stop"
+    exit "${1:-0}"
+}
+
+case "${1:-}" in -h|--help) usage 0 ;; esac
+[ "$(id -u)" = "0" ] || { echo "ERROR: must run as root" >&2; exit 1; }
+
+# Self-heal: if the first-boot hook hasn't installed the Python deps yet
+# (or failed), install them now from the bundled wheels — fully offline.
+if ! python3 -c "import grpc, grpc_reflection, google.protobuf, pymavlink" >/dev/null 2>&1; then
+    echo "Bridge dependencies not installed yet — installing from bundled wheels ..."
+    sh /root/starlinkpnt/setup.sh --preinstall || {
+        echo "ERROR: dependency install failed — see output above" >&2
+        exit 1
+    }
+fi
+
+TARGET=${1:-}
+EXTRA=${2:-}
+BAUD=""
+if [ -z "$TARGET" ]; then
+    TARGET=$(uci -q get starlink_mavlink.main.mavlink)
+    [ -n "$TARGET" ] || usage 1
+    echo "Reusing saved FC target: $TARGET"
+    CONN=$TARGET
+else
+    case "$TARGET" in
+        auto)   CONN=auto ;;
+        /dev/*) CONN=$TARGET; BAUD=${EXTRA:-921600} ;;
+        *:*)    CONN=$TARGET ;;
+        *)      CONN="udpout:${TARGET}:${EXTRA:-14550}" ;;
+    esac
+    # uci set needs the config file to exist (it ships in the image, but be safe)
+    [ -f /etc/config/starlink_mavlink ] || touch /etc/config/starlink_mavlink
+    uci -q set starlink_mavlink.main=starlink_mavlink
+    uci -q set starlink_mavlink.main.mavlink="$CONN"
+    [ -n "$BAUD" ] && uci -q set starlink_mavlink.main.baud="$BAUD"
+    uci commit starlink_mavlink
+fi
+
+echo "Starting bridge -> $CONN"
+/etc/init.d/starlink_mavlink restart
+sleep 2
+if /etc/init.d/starlink_mavlink running 2>/dev/null; then
+    echo "Bridge running. Log: tail -f /root/starlinkpnt/logs/starlink_mavlink.log"
+else
+    echo "Bridge FAILED to start — check /root/starlinkpnt/logs/starlink_mavlink.log" >&2
+    exit 1
+fi

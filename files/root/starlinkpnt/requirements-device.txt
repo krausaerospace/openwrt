@@ -1,0 +1,6 @@
+# Runtime deps for starlink_mavlink.py on the companion computer.
+# (flask from requirements.txt is only needed for web_tracker.py on the ground.)
+grpcio>=1.60.0
+grpcio-reflection>=1.60.0
+protobuf>=4.25.0
+pymavlink>=2.4.40

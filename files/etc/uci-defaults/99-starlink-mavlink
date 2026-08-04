@@ -1,0 +1,12 @@
+#!/bin/sh
+# First boot of the custom image: install the bundled Python wheels
+# (setup.sh --preinstall is fully offline — python3/pip are baked into the
+# image, wheels are in wheels/). The bridge service, its uci config, and the
+# starlink-start/-stop helpers are already baked into the image, so the box
+# works out of the box: flash, SSH in, run 'starlink-start <FC-IP>'. If this
+# hook hasn't finished (or failed), starlink-start installs the deps itself.
+# The bridge is never started at boot.
+#
+# uci-defaults semantics: this script is deleted after it exits 0. If the
+# preinstall fails it exits non-zero and is retried on the next boot.
+sh /root/starlinkpnt/setup.sh --preinstall > /root/starlinkpnt/firstboot.log 2>&1

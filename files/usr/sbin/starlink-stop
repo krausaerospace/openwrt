@@ -1,0 +1,6 @@
+#!/bin/sh
+# starlink-stop — stop the Starlink->MAVLink bridge (it stays stopped until
+# starlink-start is run again). Maintained in the buildroot repo at
+# files/usr/sbin/starlink-stop and baked into the image.
+/etc/init.d/starlink_mavlink stop 2>/dev/null
+echo "Bridge stopped."

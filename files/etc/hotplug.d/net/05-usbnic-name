@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pin the two USB NICs to stable names keyed on USB controller position,
+# so each physical jack keeps its name across boots (bare lan78xx probe
+# order makes eth1/eth2 a coin toss). Mapping for this carrier —
+# xhci-hcd.0 -> jack1, xhci-hcd.1 -> jack2; verify a jack's controller
+# with: readlink -f /sys/class/net/<if>/device. Network config references
+# only jack1/jack2, so netifd never binds the transient ethX names and
+# the rename always happens while the interface is still down.
+[ "$ACTION" = "add" ] || exit 0
+case "$INTERFACE" in
+    eth[0-9]*) ;;
+    *) exit 0 ;;
+esac
+path="$DEVPATH"
+[ -n "$path" ] || path=$(readlink -f "/sys/class/net/$INTERFACE/device" 2>/dev/null)
+case "$path" in
+    *xhci-hcd.0*) want=jack1 ;;
+    *xhci-hcd.1*) want=jack2 ;;
+    *) exit 0 ;;
+esac
+[ "$INTERFACE" = "$want" ] && exit 0
+ip link set "$INTERFACE" name "$want" 2>/dev/null || \
+    logger -t usbnic-name "could not rename $INTERFACE to $want (name taken?)"

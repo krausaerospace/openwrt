@@ -1,0 +1,50 @@
+#!/bin/sh
+# First-boot WAN defaults for the field kit: Starlink in either USB jack.
+#
+# The two USB NICs get stable, jack-pinned names from the hotplug rename
+# script (05-usbnic-name): jack1/jack2, keyed on USB controller position —
+# label the physical jacks to match. Starlink defaults to jack2 and 'aux'
+# (free for unrelated equipment) to jack1, but the dish works in either:
+# the starlink-portd service re-points wan/wan6/dishmgmt at whichever
+# jack actually answers the dish (192.168.100.1) and gives 'aux' the
+# other. Role changes are committed, so a unit settles onto its cabling
+# across reboots. Configure any other-equipment needs on the aux
+# interface (any proto/addressing EXCEPT 192.168.100.0/24 — that subnet
+# is what identifies the dish).
+#
+# dishmgmt is a static alias in the dish's management subnet, up from boot
+# regardless of DHCP state, so the gRPC API (192.168.100.1:9200) and dish
+# UI stay reachable while the dish is booting, stowed, or has no sky view.
+uci -q batch <<'EOF'
+delete network.br_wan
+set network.wan=interface
+set network.wan.device='jack2'
+set network.wan.proto='dhcp'
+set network.wan6=interface
+set network.wan6.device='jack2'
+set network.wan6.proto='dhcpv6'
+delete network.starlink_dish
+set network.dishmgmt=interface
+set network.dishmgmt.device='jack2'
+set network.dishmgmt.proto='static'
+set network.dishmgmt.ipaddr='192.168.100.2'
+set network.dishmgmt.netmask='255.255.255.0'
+set network.aux=interface
+set network.aux.device='jack1'
+set network.aux.proto='none'
+commit network
+EOF
+
+# Put the dish-management alias in the wan zone (masqueraded) so LAN hosts
+# can reach the dish UI/API through the router too.
+i=0
+while zn=$(uci -q get firewall.@zone[$i].name); do
+    if [ "$zn" = "wan" ]; then
+        uci -q del_list firewall.@zone[$i].network='dishmgmt'
+        uci -q add_list firewall.@zone[$i].network='dishmgmt'
+        uci commit firewall
+        break
+    fi
+    i=$((i + 1))
+done
+exit 0
