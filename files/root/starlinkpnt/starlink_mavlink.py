@@ -30,8 +30,8 @@ def _lazy_imports_mavlink():
 
 
 def _lazy_imports():
-    """Import heavy runtime deps (grpc, pymavlink). Deferred so --install works
-    on machines that don't have them installed."""
+    """Import heavy runtime deps (grpc, pymavlink). Deferred so --discover-only
+    and --help work without grpc installed."""
     global grpc, reflection_pb2, reflection_pb2_grpc, descriptor_pb2
     global DescriptorPool, GetMessageClass, MessageToDict
     import grpc as _grpc
@@ -417,7 +417,7 @@ def drain_mavlink(mav_conn, ack_state):
 
 
 # ---------------------------------------------------------------------------
-# Flight controller auto-discovery (--mavlink auto)
+# Flight controller -discovery (--mavlink auto)
 # ---------------------------------------------------------------------------
 
 DISCOVER_CHUNK = 64          # probes per burst
@@ -613,123 +613,6 @@ def discover_fc(cidrs=None, port=14550, state_path=None, max_hosts=65534):
 
 
 # ---------------------------------------------------------------------------
-# Self-install onto a remote aircraft companion computer
-# ---------------------------------------------------------------------------
-
-INITD_TEMPLATE = """\
-#!/bin/sh /etc/rc.common
-
-START=99
-STOP=10
-
-USE_PROCD=1
-
-start_service() {{
-    procd_open_instance
-    procd_set_param command {cmd}
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_set_param respawn 3600 5 5
-    procd_close_instance
-}}
-"""
-
-
-def _shq(s):
-    """Minimal single-quote shell quoting."""
-    return "'" + str(s).replace("'", "'\\''") + "'"
-
-
-def install(args):
-    """Copy this script to a remote host, install deps, and register as a service.
-
-    Idempotent — safe to re-run to push script/config updates.
-    Assumes OpenWrt with apk, procd, and passwordless SSH to the target.
-    """
-    import subprocess
-
-    target = args.install
-    remote_dir = args.remote_dir
-    script_src = os.path.abspath(__file__)
-    script_dst = f"{remote_dir}/starlink_mavlink.py"
-    remote_log_dir = f"{remote_dir}/logs"
-    initd_path = "/etc/init.d/starlink_mavlink"
-
-    def ssh(cmd, stdin=None, check=True):
-        logging.info("$ ssh %s %s", target, cmd)
-        r = subprocess.run(
-            ["ssh", target, cmd],
-            input=stdin, text=True, capture_output=True,
-        )
-        if r.stdout.strip():
-            logging.info(r.stdout.strip())
-        if r.returncode != 0:
-            logging.error(r.stderr.strip())
-            if check:
-                raise RuntimeError(f"remote command failed (rc={r.returncode}): {cmd}")
-        return r
-
-    def scp(src, dst):
-        logging.info("$ scp -O %s %s:%s", src, target, dst)
-        subprocess.run(["scp", "-O", src, f"{target}:{dst}"], check=True)
-
-    # --- Preflight ---
-    ssh("echo connected && uname -a")
-
-    # --- Python + pip ---
-    ssh(
-        "command -v python3 >/dev/null 2>&1 && command -v pip3 >/dev/null 2>&1 "
-        "|| (apk update && apk add python3 python3-pip)"
-    )
-
-    # --- Project directory ---
-    ssh(f"mkdir -p {_shq(remote_dir)} {_shq(remote_log_dir)}")
-
-    # --- Copy script ---
-    scp(script_src, script_dst)
-    ssh(f"chmod +x {_shq(script_dst)}")
-
-    # --- Python deps (idempotent) ---
-    ssh(
-        "pip3 install --break-system-packages --quiet "
-        "grpcio grpcio-reflection protobuf pymavlink"
-    )
-
-    # --- Build the procd service command line ---
-    cmd_parts = [
-        "python3", script_dst,
-        "--mavlink", args.mavlink,
-        "--baud", str(args.baud),
-        "--interval", str(args.interval),
-        "--log-dir", remote_log_dir,
-        "--no-console",
-    ]
-    for a in args.starlink_addr or []:
-        cmd_parts += ["--starlink-addr", a]
-    cmd_str = " ".join(_shq(p) if " " in str(p) else str(p) for p in cmd_parts)
-
-    initd = INITD_TEMPLATE.format(cmd=cmd_str)
-
-    # --- Write init.d script ---
-    ssh(
-        f"cat > {_shq(initd_path)} && chmod +x {_shq(initd_path)}",
-        stdin=initd,
-    )
-
-    # --- Enable + (re)start ---
-    ssh(f"{_shq(initd_path)} enable")
-    ssh(f"{_shq(initd_path)} restart")
-
-    # --- Verify ---
-    time.sleep(5)
-    logging.info("--- service status ---")
-    ssh(f"{_shq(initd_path)} status", check=False)
-    logging.info("--- last log lines ---")
-    ssh(f"tail -20 {_shq(remote_log_dir)}/starlink_mavlink.log", check=False)
-    logging.info("Install complete. Service enabled at %s", initd_path)
-
-
-# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
@@ -804,28 +687,7 @@ def main():
     parser.add_argument(
         "--no-console", action="store_true", help="Suppress console output"
     )
-    parser.add_argument(
-        "--install",
-        metavar="HOST",
-        help="Install as a boot service on remote host (e.g. root@10.221.0.1) "
-        "instead of running locally. Passes through --mavlink/--baud/--interval/"
-        "--starlink-addr into the installed service.",
-    )
-    parser.add_argument(
-        "--remote-dir",
-        default="/root/starlinkpnt",
-        help="Install directory on remote host (default: /root/starlinkpnt)",
-    )
     args = parser.parse_args()
-
-    if args.install:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s %(levelname)-7s %(message)s",
-            datefmt="%H:%M:%S",
-        )
-        install(args)
-        return
 
     if args.discover_only:
         _lazy_imports_mavlink()  # discovery needs pymavlink but not grpc

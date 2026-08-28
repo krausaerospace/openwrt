@@ -25,7 +25,7 @@ case "${1:-}" in -h|--help) usage 0 ;; esac
 # (or failed), install them now from the bundled wheels — fully offline.
 if ! python3 -c "import grpc, grpc_reflection, google.protobuf, pymavlink" >/dev/null 2>&1; then
     echo "Bridge dependencies not installed yet — installing from bundled wheels ..."
-    sh /root/starlinkpnt/setup.sh --preinstall || {
+    starlink-install-deps || {
         echo "ERROR: dependency install failed — see output above" >&2
         exit 1
     }

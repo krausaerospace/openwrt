@@ -1,0 +1,32 @@
+#!/bin/sh
+# starlink-install-deps — install the bridge's Python deps from the wheelhouse
+# baked into the image (/root/starlinkpnt/wheels), fully offline. Idempotent.
+# Called by the first-boot hook (99-starlink-mavlink) and by starlink-start as
+# a self-heal if that hook hasn't run. Falls back to PyPI only if there is no
+# wheelhouse.
+set -eu
+APP=/root/starlinkpnt
+REQS=$APP/requirements-device.txt
+
+if python3 -c "import grpc, grpc_reflection, google.protobuf, pymavlink" >/dev/null 2>&1; then
+    echo "bridge deps already installed"
+    exit 0
+fi
+
+PIPFLAGS=""
+if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+    PIPFLAGS="--break-system-packages"
+fi
+if [ -d "$APP/wheels" ]; then
+    echo "installing bridge deps from $APP/wheels (offline)"
+    # shellcheck disable=SC2086
+    python3 -m pip install $PIPFLAGS --no-index --find-links "$APP/wheels" -r "$REQS"
+else
+    echo "no wheelhouse at $APP/wheels — installing from PyPI (needs WAN)"
+    # shellcheck disable=SC2086
+    python3 -m pip install $PIPFLAGS -r "$REQS"
+fi
+python3 -c "import grpc, grpc_reflection, google.protobuf, pymavlink"
+mkdir -p "$APP/logs"
+chmod +x "$APP/starlink_mavlink.py" 2>/dev/null || true
+echo "bridge deps OK"

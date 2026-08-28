@@ -1,5 +1,5 @@
-# Runtime deps for starlink_mavlink.py on the companion computer.
-# (flask from requirements.txt is only needed for web_tracker.py on the ground.)
+# Runtime deps for starlink_mavlink.py on the router. Owned by this buildroot
+# (the app repo ships no packaging); build_wheelhouse.sh reads this file.
 grpcio>=1.60.0
 grpcio-reflection>=1.60.0
 protobuf>=4.25.0

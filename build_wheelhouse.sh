@@ -14,7 +14,7 @@
 # PYTHON_TAG must match the image's python3 minor version:
 #   grep PYTHON3_VERSION feeds/packages/lang/python/python3-version.mk
 #
-# Re-run after changing requirements-device.txt (sync-starlinkpnt.sh first).
+# Re-run after changing files/root/starlinkpnt/requirements-device.txt.
 
 set -eu
 cd "$(dirname "$0")"
@@ -25,7 +25,7 @@ REQS=$APPDIR/requirements-device.txt
 WHEELS=$APPDIR/wheels
 PLATFORM=musllinux_1_2_aarch64
 
-[ -f "$REQS" ] || { echo "ERROR: $REQS not found — run ./sync-starlinkpnt.sh first" >&2; exit 1; }
+[ -f "$REQS" ] || { echo "ERROR: $REQS not found" >&2; exit 1; }
 mkdir -p "$WHEELS"
 
 # ---------------------------------------------------------------------------
