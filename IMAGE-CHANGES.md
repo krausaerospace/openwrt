@@ -32,8 +32,7 @@ This image is a customized build of OpenWrt v25.12.5 for the Raspberry Pi 5, pur
 ## Network / Firewall Configuration (applied on first boot)
 
 - LAN readdressed to 10.221.0.1/16 (stock default is 192.168.1.1/24).
-- A `gcsvpn` firewall zone covers any ZeroTier interface (`zt+`), accepting management access (SSH/LuCI) over the VPN while rejecting all forwards.
-- CloudConnexa (OpenVPN `tun+`) interfaces are placed in the LAN zone.
+- All VPN interfaces are treated as part of the LAN: ZeroTier (`zt+`), Tailscale (`tailscale0`) and CloudConnexa (OpenVPN `tun+`) are placed in the LAN zone with full LAN access (no separate management-only zone).
 - The dish management subnet is in the WAN zone with masquerade, so LAN hosts can reach the dish UI/API through the router.
 
 ## Operations / Field Support
