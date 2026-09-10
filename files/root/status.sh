@@ -34,7 +34,7 @@ fi
 if ping -c1 -W2 192.168.100.1 >/dev/null 2>&1; then
     echo "  ping dish (192.168.100.1): OK"
 else
-    echo "  ping dish (192.168.100.1): FAIL (bridge can't poll position without this)"
+    echo "  ping dish (192.168.100.1): FAIL (no WAN lease yet? bridge can't poll position without this)"
 fi
 
 echo "== ZeroTier"

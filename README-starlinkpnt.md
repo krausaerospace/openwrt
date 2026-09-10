@@ -4,9 +4,11 @@ This buildroot produces the Pi 5 field-router image with the Starlink→MAVLink
 position bridge fully baked in — flash it and it works out of the box: the
 service, uci config, and `starlink-start`/`starlink-stop` helpers are in the
 image itself, and the Python deps install offline at first boot (with
-`starlink-start` self-healing if that hook hasn't run). The bridge never
-autostarts — an operator SSHes in and runs `starlink-start <FC-IP>` (or
-`starlink-start auto`) after every boot. The bridge app ships in
+`starlink-start` self-healing if that hook hasn't run). The bridge does not
+autostart by default — an operator starts it from the LuCI page (Services >
+Starlink PNT) or runs `starlink-start <FC-IP>` (or `starlink-start auto`)
+after every boot; "Start at boot" can be switched on from that page. The
+bridge app ships in
 `files/root/starlinkpnt/` (see the app's `SETUP.md` for the FC-side ArduPilot
 checklist and how the bridge works).
 
@@ -26,15 +28,18 @@ config-starlinkpnt.seed                   diffconfig seeding .config on fresh cl
 files/root/status.sh                      field verification ladder (WAN, ZT, bridge)
 files/root/starlinkpnt/                   bridge app + setup.sh + wheels/
 files/etc/uci-defaults/99-starlink-mavlink   first-boot hook (offline wheel install; no start)
-files/etc/init.d/starlink_mavlink         bridge service (no rc.d symlink = no autostart)
+files/etc/init.d/starlink_mavlink         bridge service (boot start gated on uci autostart, default off)
 files/etc/config/starlink_mavlink         bridge uci config (FC target etc.)
 files/usr/sbin/starlink-start             set FC target + start the bridge
 files/usr/sbin/starlink-stop              stop the bridge
+files/usr/sbin/starlink-gps-aux           FC GPS enable/disable over MAVLink (LuCI GPS buttons)
+files/www/luci-static/resources/view/starlinkpnt.js   LuCI "Starlink PNT" page
+files/usr/share/rpcd/ucode/starlinkpnt.uc             its rpcd backend (ubus luci.starlinkpnt)
+files/usr/share/rpcd/acl.d/luci-app-starlinkpnt.json  ACL grant for the page
+files/usr/share/luci/menu.d/luci-app-starlinkpnt.json menu entry (Services > Starlink PNT)
 files/etc/profile.d/starlink-hint.sh      login hint when the bridge isn't running
 files/etc/hotplug.d/net/05-usbnic-name    pin USB NICs to jack1/jack2 by physical position
-files/etc/uci-defaults/99-starlink-wan    WAN preset: wan=jack2, aux=jack1, dish mgmt alias
-files/usr/sbin/starlink-portd             keep WAN on whichever jack the dish answers on
-files/etc/init.d/starlink-portd           (service for the above; rc.d symlink shipped)
+files/etc/uci-defaults/99-starlink-wan    WAN preset: wan=jack2, aux=jack1
 files/etc/uci-defaults/99-lan-ip          LAN preset
 files/etc/uci-defaults/99-gcsvpn-zone     gcsvpn firewall zone (any zt* iface)
 ```
@@ -65,12 +70,11 @@ result resolves fully offline against the target platform.
    the hotplug rename script pins the two USB NICs to `jack1`/`jack2` by
    physical position (raw lan78xx probe order is a coin toss, so kernel
    eth1/eth2 names are never referenced); `99-starlink-wan` puts WAN
-   (dhcp + dhcpv6) on jack2 and the free-for-anything `aux` interface on
-   jack1, plus a static alias 192.168.100.2/24 so the dish gRPC API is
-   reachable even without a lease; `starlink-portd` swaps the roles if
-   the dish (the only thing that answers 192.168.100.1 — never use that
-   subnet on aux gear) is found on the other jack, so either jack works;
-   `99-starlink-mavlink`
+   (dhcp + dhcpv6) on jack2 — the dish is always cabled there on this
+   hardware — and the free-for-anything `aux` interface on jack1. The dish
+   (192.168.100.1) is reached through the WAN lease, which carries a route
+   to it, so the gRPC API is only reachable once the dish has handed out a
+   lease; `99-starlink-mavlink`
    installs the bundled wheels offline. The bridge service, uci config, and
    `starlink-start`/`starlink-stop` are plain files under `files/` baked into
    the image — that's their single source of truth; setup.sh only installs
@@ -82,11 +86,15 @@ result resolves fully offline against the target platform.
    `zerotier-cli join <network-id>` — then authorize the node in the
    controller. To make this zero-touch too, bake the network ID into a
    uci-defaults script.
-3. **Starting the bridge** (manual, every boot): SSH in and run
-   `starlink-start <FC-IP>` — or `starlink-start auto` to scan the network,
-   `starlink-start /dev/ttyAMA10 [baud]` for serial, or bare `starlink-start`
-   to reuse the last saved target. The login shell prints a reminder whenever
-   the bridge isn't running; `starlink-stop` stops it.
+3. **Starting the bridge** (manual unless "Start at boot" is on): open LuCI
+   at Services > Starlink PNT, pick the FC link (the FC IP defaults to the
+   LAN address with 11 as the third octet, e.g. 10.221.0.21 → 10.221.11.21)
+   and press Save & Start — or SSH in and run `starlink-start <FC-IP>`,
+   `starlink-start auto` to scan the network, `starlink-start /dev/ttyAMA10
+   [baud]` for serial, or bare `starlink-start` to reuse the last saved
+   target. Both write the same uci config. The page also has Disable/Enable
+   GPS buttons for the FC. The login shell prints a reminder whenever the
+   bridge isn't running; `starlink-stop` (or the page's Stop) stops it.
 4. **Runtime**: once started, the service waits for the dish, scans for a
    MAVLink FC if in auto mode (cached IP → broadcast → paced subnet sweep on
    UDP 14550), streams `MAV_CMD_EXTERNAL_POSITION_ESTIMATE`, re-discovers if
@@ -112,7 +120,7 @@ manylinux_aarch64 wheels in `wheels-ubuntu/` for offline installs), writes
 to pin a FC address or serial port.
 
 None of the image's networking exists on Ubuntu — no LAN DHCP server, jack
-pinning, starlink-portd, or ZeroTier. Minimum netplan for the bridge:
+pinning, or ZeroTier. Minimum netplan for the bridge:
 a `192.168.100.2/24` alias (+ dhcp4) on the Starlink-facing NIC so the dish
 gRPC is reachable, and a static address on the FC subnet (e.g.
 `10.221.0.1/16`) so auto discovery can find the autopilot.

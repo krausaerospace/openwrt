@@ -1,0 +1,94 @@
+#!/usr/bin/python3
+"""starlink-gps-aux - enable or disable a flight controller's GPS over MAVLink.
+
+Usage: starlink-gps-aux <fc-ip> <udp-port> enable|disable
+
+Sends MAV_CMD_DO_AUX_FUNCTION (218) with aux function 65 (ArduPilot
+"GPS Disable"): disable = switch HIGH (2), enable = switch LOW (0). No
+RCx_OPTION assignment is needed on the FC for scripted aux functions.
+Ported from the lawanda gps-web panel. Called by the LuCI Starlink PNT page
+(rpcd ucode plugin /usr/share/rpcd/ucode/starlinkpnt.uc); usable by hand too.
+
+Exit status: 0 = accepted or sent without a reply, 1 = rejected / failed,
+2 = bad arguments. The one-line result on stdout is what LuCI shows.
+"""
+import ipaddress
+import sys
+
+AUX_FUNC = 65
+SWITCH_HIGH = 2   # disable GPS
+SWITCH_LOW = 0    # enable GPS
+
+
+def send_aux_function(mavutil, fc_ip, fc_port, aux_func, switch_pos):
+    """Send one MAV_CMD_DO_AUX_FUNCTION to the FC. Returns (ok, message)."""
+    ipaddress.ip_address(fc_ip)
+    port = int(fc_port)
+    if not (0 < port < 65536):
+        raise ValueError("port out of range")
+
+    master = None
+    try:
+        master = mavutil.mavlink_connection(f"udpout:{fc_ip}:{port}",
+                                            source_system=255,
+                                            source_component=190)
+        # Nudge the FC so it learns our address and so we can catch its
+        # heartbeat to discover the real target system id.
+        master.mav.heartbeat_send(
+            mavutil.mavlink.MAV_TYPE_GCS,
+            mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
+
+        target_system = 1
+        target_component = 1
+        hb = master.recv_match(type="HEARTBEAT", blocking=True, timeout=3)
+        if hb is not None:
+            target_system = hb.get_srcSystem()
+            target_component = mavutil.mavlink.MAV_COMP_ID_AUTOPILOT1
+
+        master.mav.command_long_send(
+            target_system, target_component,
+            mavutil.mavlink.MAV_CMD_DO_AUX_FUNCTION,
+            0,                       # confirmation
+            float(aux_func),         # param1: aux function
+            float(switch_pos),       # param2: switch position
+            0, 0, 0, 0, 0)
+
+        ack = master.recv_match(type="COMMAND_ACK", blocking=True, timeout=3)
+        if ack is not None and ack.command == mavutil.mavlink.MAV_CMD_DO_AUX_FUNCTION:
+            if ack.result == mavutil.mavlink.MAV_RESULT_ACCEPTED:
+                return True, f"FC {target_system} accepted the command."
+            name = mavutil.mavlink.enums["MAV_RESULT"].get(ack.result)
+            label = name.name if name else str(ack.result)
+            return False, f"FC rejected the command (result={label})."
+
+        if hb is None:
+            return True, ("Command sent (no heartbeat or ACK received - "
+                          "verify the FC IP/port and that MAVLink is reachable).")
+        return True, (f"Command sent to FC {target_system}; no ACK received "
+                      "(older firmware may not ACK aux functions).")
+    finally:
+        if master is not None:
+            master.close()
+
+
+def main(argv):
+    if len(argv) != 4 or argv[3] not in ("enable", "disable"):
+        print("usage: starlink-gps-aux <fc-ip> <udp-port> enable|disable")
+        return 2
+    try:
+        from pymavlink import mavutil
+    except ImportError:
+        print("pymavlink is not installed - run starlink-install-deps")
+        return 1
+    switch_pos = SWITCH_HIGH if argv[3] == "disable" else SWITCH_LOW
+    verb = "Disable" if argv[3] == "disable" else "Enable"
+    try:
+        ok, message = send_aux_function(mavutil, argv[1], argv[2], AUX_FUNC, switch_pos)
+    except Exception as exc:  # noqa: BLE001 - one-line report for the UI
+        ok, message = False, f"send failed: {exc}"
+    print(f"{verb} GPS: {message}")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

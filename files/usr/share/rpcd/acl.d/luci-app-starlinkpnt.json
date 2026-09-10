@@ -1,0 +1,17 @@
+{
+	"luci-app-starlinkpnt": {
+		"description": "Grant access to the Starlink PNT bridge page",
+		"read": {
+			"ubus": {
+				"luci.starlinkpnt": [ "status", "get_settings", "check_deps" ]
+			},
+			"uci": [ "starlink_mavlink" ]
+		},
+		"write": {
+			"ubus": {
+				"luci.starlinkpnt": [ "set_settings", "start", "stop", "gps_aux" ]
+			},
+			"uci": [ "starlink_mavlink" ]
+		}
+	}
+}

@@ -1,7 +1,12 @@
 #!/bin/sh /etc/rc.common
 # Starlink->MAVLink bridge service. Maintained in the buildroot repo at
-# files/etc/init.d/starlink_mavlink and baked into the image. Never enabled
-# at boot (no rc.d symlink) — started only by starlink-start.
+# files/etc/init.d/starlink_mavlink and baked into the image.
+#
+# The image build enables every init script it finds (include/rootfs.mk),
+# so an S99 symlink always exists. boot() below therefore gates the boot-time
+# start on starlink_mavlink.main.autostart, which ships as '0': by default
+# the bridge is only started by starlink-start or from the LuCI
+# "Starlink PNT" page, where the flag can also be switched on.
 # Configuration lives in /etc/config/starlink_mavlink (uci).
 
 START=99
@@ -17,6 +22,17 @@ append_starlink_addr() {
 
 append_discover_cidr() {
 	procd_append_param command --discover-cidr "$1"
+}
+
+boot() {
+	local autostart
+	config_load starlink_mavlink
+	config_get_bool autostart main autostart 0
+	if [ "$autostart" = 1 ]; then
+		start "$@"
+	else
+		logger -t starlink_mavlink "autostart is off; start with starlink-start or from LuCI"
+	fi
 }
 
 start_service() {
