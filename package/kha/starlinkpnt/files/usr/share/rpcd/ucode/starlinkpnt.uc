@@ -2,8 +2,8 @@
 'use strict';
 
 // rpcd ucode plugin behind the LuCI "Starlink PNT" page
-// (files/www/luci-static/resources/view/starlinkpnt.js). Maintained in the
-// buildroot repo at files/usr/share/rpcd/ucode/starlinkpnt.uc.
+// (package/kha/starlinkpnt/files/www/luci-static/resources/view/starlinkpnt.js). Maintained in the
+// buildroot repo at package/kha/starlinkpnt/files/usr/share/rpcd/ucode/starlinkpnt.uc.
 //
 // uci starlink_mavlink.main stays the single source of truth: the target is
 // stored as the same pymavlink string starlink-start writes, so the page and

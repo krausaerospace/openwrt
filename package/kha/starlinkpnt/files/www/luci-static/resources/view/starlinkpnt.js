@@ -10,7 +10,7 @@
 /*
  * Starlink PNT - LuCI page for the Starlink->MAVLink position bridge.
  * Maintained in the buildroot repo at
- * files/www/luci-static/resources/view/starlinkpnt.js. The backend is the
+ * package/kha/starlinkpnt/files/www/luci-static/resources/view/starlinkpnt.js. The backend is the
  * rpcd ucode plugin /usr/share/rpcd/ucode/starlinkpnt.uc (ubus object
  * luci.starlinkpnt); settings live in uci starlink_mavlink, shared with the
  * starlink-start / starlink-stop shell helpers.

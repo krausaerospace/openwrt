@@ -1,9 +1,9 @@
 #!/bin/sh
-# status.sh — field verification ladder for the Starlink kit (non-interactive).
-# Checks WAN, ZeroTier (if present), and the Starlink->MAVLink position bridge.
-# Networking is configured automatically at first boot; ZeroTier membership is
-# managed from the controller side. The bridge is started manually with
-# starlink-start after every boot.
+# status.sh — field verification ladder for the router (non-interactive).
+# Checks WAN and ZeroTier (if present). Networking is configured
+# automatically at first boot; ZeroTier membership is managed from the
+# controller side.
+# Installed packages can add sections via /usr/share/kha-status.d/*.sh.
 
 echo "== WAN"
 wd=$(uci -q get network.wan.device)
@@ -29,12 +29,7 @@ rt=$(ip route 2>/dev/null | grep '^default')
 if ping -c1 -W2 1.1.1.1 >/dev/null 2>&1; then
     echo "  ping 1.1.1.1: OK"
 else
-    echo "  ping 1.1.1.1: FAIL  (dish booting? cable? obstruction?)"
-fi
-if ping -c1 -W2 192.168.100.1 >/dev/null 2>&1; then
-    echo "  ping dish (192.168.100.1): OK"
-else
-    echo "  ping dish (192.168.100.1): FAIL (no WAN lease yet? bridge can't poll position without this)"
+    echo "  ping 1.1.1.1: FAIL  (upstream down? cable?)"
 fi
 
 echo "== ZeroTier"
@@ -54,19 +49,12 @@ else
     echo "  not installed"
 fi
 
-echo "== Starlink-MAVLink bridge"
-if [ -x /etc/init.d/starlink_mavlink ]; then
-    if /etc/init.d/starlink_mavlink running 2>/dev/null; then
-        echo "  service: running"
-    else
-        echo "  service: NOT running — start it: starlink-start <FC-IP>  (or 'starlink-start auto')"
-    fi
-    [ -f /root/starlinkpnt/logs/last_fc.txt ] && \
-        echo "  last FC: $(cat /root/starlinkpnt/logs/last_fc.txt)"
-    tail -n 3 /root/starlinkpnt/logs/starlink_mavlink.log 2>/dev/null | sed 's/^/  log: /'
-else
-    echo "  not installed (sh /root/starlinkpnt/setup.sh --preinstall)"
-fi
+# Optional sections dropped in by packages (sourced in lexical order).
+for f in /usr/share/kha-status.d/*.sh; do
+    [ -f "$f" ] || continue
+    echo
+    ( . "$f" )
+done
 
 y=$(date +%Y)
 [ "$y" -lt 2024 ] 2>/dev/null && \

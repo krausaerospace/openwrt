@@ -1,0 +1,22 @@
+#!/bin/sh
+# ZeroTier and Tailscale interfaces join the LAN zone: VPN peers get the
+# same access as wired LAN hosts (ssh/LuCI on the router, forwarding to LAN
+# and WAN). zt+ is a wildcard because the ZeroTier interface name depends on
+# the joined network ID, which isn't known at image build time. CloudConnexa
+# (tun+) is handled the same way by 99-cloudconnexa-firewall.
+#
+# Older images put zt+ in a separate management-only 'gcsvpn' zone (input
+# accepted, forwards rejected); it is removed here so a sysupgrade that
+# keeps its config ends up with the same layout as a fresh flash.
+
+# Find the lan zone by name; the stock firewall config has it first.
+lan=$(uci -q show firewall | sed -n "s/^firewall\.\(.*\)\.name='lan'\$/\1/p" | head -n1)
+[ -n "$lan" ] || lan='@zone[0]'
+
+uci -q delete firewall.gcsvpn
+for dev in zt+ tailscale0; do
+    uci -q get "firewall.$lan.device" | tr ' ' '\n' | grep -qxF "$dev" \
+        || uci add_list "firewall.$lan.device=$dev"
+done
+uci commit firewall
+exit 0

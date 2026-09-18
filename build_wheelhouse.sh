@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build the aarch64/musl Python wheelhouse for the starlinkpnt bridge into
-# files/root/starlinkpnt/wheels, so first boot pip-installs fully offline.
+# package/kha/starlinkpnt/files/root/starlinkpnt/wheels, so first boot pip-installs fully offline.
 #
 # Strategies (tried in order):
 #   1. docker  — exact-environment build inside python:<tag>-alpine on arm64
@@ -14,13 +14,13 @@
 # PYTHON_TAG must match the image's python3 minor version:
 #   grep PYTHON3_VERSION feeds/packages/lang/python/python3-version.mk
 #
-# Re-run after changing files/root/starlinkpnt/requirements-device.txt.
+# Re-run after changing package/kha/starlinkpnt/files/root/starlinkpnt/requirements-device.txt.
 
 set -eu
 cd "$(dirname "$0")"
 
 PYTHON_TAG=${PYTHON_TAG:-3.13}
-APPDIR=$PWD/files/root/starlinkpnt
+APPDIR=$PWD/package/kha/starlinkpnt/files/root/starlinkpnt
 REQS=$APPDIR/requirements-device.txt
 WHEELS=$APPDIR/wheels
 PLATFORM=musllinux_1_2_aarch64

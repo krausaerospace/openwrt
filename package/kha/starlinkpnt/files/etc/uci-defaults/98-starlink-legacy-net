@@ -1,0 +1,23 @@
+#!/bin/sh
+# Sysupgrade clean-up: remove the legacy dish interfaces left by older images.
+#
+# Images before the fixed-WAN-jack change created network.starlink_dish and
+# network.dishmgmt (a static 192.168.100.2 alias on the WAN jack). The dish
+# (192.168.100.1: web UI and gRPC API on :9200) is reached through the WAN
+# lease — Starlink's DHCP pushes a route to it — so no static alias in the
+# dish subnet is wanted. A device sysupgraded with its config kept would
+# otherwise carry the alias forever.
+#
+# Shipped by the starlinkpnt package because the shared WAN preset
+# (99-wan-jacks) is variant-neutral. Runs before it by lexical order and
+# commits on its own. On a fresh flash neither section exists: 'uci -q batch'
+# stays quiet about the failed deletes and the script is a no-op.
+#
+# uci-defaults semantics: this script is deleted after it exits 0, which it
+# always does.
+uci -q batch <<'EOF'
+delete network.starlink_dish
+delete network.dishmgmt
+commit network
+EOF
+exit 0

@@ -1,6 +1,6 @@
 #!/bin/sh
 # starlink-start — configure the FC target and start the Starlink->MAVLink
-# bridge. Maintained in the buildroot repo at files/usr/sbin/starlink-start
+# bridge. Maintained in the buildroot repo at package/kha/starlinkpnt/files/usr/sbin/starlink-start
 # and baked into the image. The bridge does not autostart at boot; run this
 # after every reboot.
 #

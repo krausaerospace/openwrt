@@ -1,6 +1,6 @@
 #!/bin/sh /etc/rc.common
 # Starlink->MAVLink bridge service. Maintained in the buildroot repo at
-# files/etc/init.d/starlink_mavlink and baked into the image.
+# package/kha/starlinkpnt/files/etc/init.d/starlink_mavlink and baked into the image.
 #
 # The image build enables every init script it finds (include/rootfs.mk),
 # so an S99 symlink always exists. boot() below therefore gates the boot-time

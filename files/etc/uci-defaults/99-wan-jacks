@@ -1,0 +1,23 @@
+#!/bin/sh
+# First-boot WAN defaults for the field kit: WAN on jack2, aux on jack1.
+#
+# The two USB NICs get stable, jack-pinned names from the hotplug rename
+# script (05-usbnic-name): jack1/jack2, keyed on USB controller position —
+# label the physical jacks to match. The upstream link is always cabled to
+# jack2 on this hardware, so WAN is fixed there; jack1 is the 'aux'
+# interface, free for unrelated equipment (configure any proto/addressing
+# it needs on aux).
+uci -q batch <<'UCI'
+delete network.br_wan
+set network.wan=interface
+set network.wan.device='jack2'
+set network.wan.proto='dhcp'
+set network.wan6=interface
+set network.wan6.device='jack2'
+set network.wan6.proto='dhcpv6'
+set network.aux=interface
+set network.aux.device='jack1'
+set network.aux.proto='none'
+commit network
+UCI
+exit 0

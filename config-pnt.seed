@@ -1,0 +1,3 @@
+# pnt variant fragment: appended to config.seed by ./build.sh pnt.
+# The starlinkpnt package's DEPENDS select python3, python3-pip, rpcd/ucode, luci-base.
+CONFIG_PACKAGE_starlinkpnt=y

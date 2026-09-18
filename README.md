@@ -1,5 +1,76 @@
 ![OpenWrt logo](include/logo.png)
 
+# KHA field-router image (krausaerospace/openwrt)
+
+This repository is a fork of OpenWrt v25.12.5 that builds the Raspberry Pi 5
+(bcm27xx/bcm2712) field-kit router image. Everything below the "OpenWrt
+Project" heading is the upstream README, kept unchanged. The full list of
+differences from stock OpenWrt is in [IMAGE-CHANGES.md](IMAGE-CHANGES.md).
+
+## Two image variants, one branch
+
+Both variants are built from the same commit on `main`.
+
+| Variant | Contents | Image filenames |
+|---|---|---|
+| `base` | The router only: WAN/LAN presets, VPNs (ZeroTier, Tailscale, WireGuard, OpenVPN/CloudConnexa, IPsec/strongSwan), LuCI, GStreamer/ffmpeg. No Python and nothing Starlink-related. | `openwrt-base-bcm27xx-bcm2712-rpi-5-*` |
+| `pnt` | `base` plus the `starlinkpnt` package: the Starlink-to-MAVLink position bridge, its Python 3 runtime and offline wheels, and the LuCI "Starlink PNT" page. | `openwrt-pnt-bcm27xx-bcm2712-rpi-5-*` |
+
+The only difference between the two is one package. All Starlink PNT content
+lives in [package/kha/starlinkpnt](package/kha/starlinkpnt/README.md); the
+shared `files/` overlay is copied into every image and holds only
+variant-neutral files, so put PNT files in the package, never in `files/`.
+
+## Building
+
+```
+git clone https://github.com/krausaerospace/openwrt.git && cd openwrt
+./build.sh base        # or: ./build.sh pnt
+./build.sh             # reuses the last variant
+./build.sh pnt package/starlinkpnt/compile    # extra args go to make
+```
+
+On a fresh clone `build.sh` bootstraps the feeds and seeds `.config` from
+`config.seed`, plus `config-pnt.seed` for `pnt`. Switching variants needs no
+clean: compiled packages stay cached and only the root filesystem and images
+are rebuilt, so both variants' images sit side by side in
+`bin/targets/bcm27xx/bcm2712/`.
+
+A re-seed replaces `.config`. It happens when there is no `.config`, when the
+variant changes, or when a seed file is newer than `.config`. The previous
+`.config` is always kept as `tmp/.config.before-reseed.<timestamp>`, and
+`build.sh` prints the path. To keep a menuconfig change, fold it into the
+seed: `./build.sh base`, `make menuconfig`, then
+`./scripts/diffconfig.sh > config.seed`. Never regenerate `config.seed` from a
+`pnt` configuration.
+
+## Releases
+
+Tagged images are published on the
+[releases page](https://github.com/krausaerospace/openwrt/releases) as
+`kha-<YYYY.MM.DD>`. Each release carries both variants:
+
+- `*-squashfs-factory.img.gz` or `*-ext4-factory.img.gz` for a fresh SD card.
+- `*-sysupgrade.img.gz` for an existing unit.
+- The `.manifest` package list for each variant, and `sha256sums`.
+
+Pick `openwrt-base-...` for a plain router and `openwrt-pnt-...` for a Starlink
+PNT kit. A unit can move between variants with a sysupgrade.
+
+## Network defaults
+
+- LAN is 10.221.0.1/16. WAN (DHCP and DHCPv6) is fixed on USB jack 2, and jack 1
+  is a free `aux` interface.
+- **VPN interfaces join the LAN zone.** ZeroTier (`zt+`), Tailscale
+  (`tailscale0`) and CloudConnexa (`tun+`) are added to the LAN firewall zone
+  on first boot, so VPN peers get the same access as wired LAN hosts. The
+  separate `gcsvpn` zone that older images created is removed.
+- SSH keys are pre-provisioned, and `/root/status.sh` is the field check script.
+
+---
+
+# OpenWrt Project
+
 OpenWrt Project is a Linux operating system targeting embedded devices. Instead
 of trying to create a single, static firmware, OpenWrt provides a fully
 writable filesystem with package management. This frees you from the
