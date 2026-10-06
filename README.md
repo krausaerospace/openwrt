@@ -48,7 +48,23 @@ seed: `./build.sh base`, `make menuconfig`, then
 
 Tagged images are published on the
 [releases page](https://github.com/krausaerospace/openwrt/releases) as
-`kha-<YYYY.MM.DD>`. Each release carries both variants:
+`kha-v<MAJOR>.<MINOR>.<PATCH>`, following [semantic versioning](https://semver.org).
+The `kha-` prefix keeps these tags apart from upstream OpenWrt's `v25.12.x`
+tags. What each part means for an image:
+
+- **MAJOR**: an existing unit cannot sysupgrade and keep its config, or
+  something a deployed kit relies on is removed or changed (default addressing,
+  jack assignment, firewall zones, image filenames).
+- **MINOR**: new packages or features, or a newer OpenWrt point release. A
+  sysupgrade that keeps the config still works.
+- **PATCH**: fixes only.
+
+While the version is `0.x` the image is not yet considered stable, and a MINOR
+bump may include breaking changes. The first two releases were originally
+tagged by date: `starlinkpnt-2026.09.10` is `kha-v0.1.0` and `kha-2026.09.18`
+is `kha-v0.2.0`. The old tags still exist and point at the same commits.
+
+Each release carries both variants:
 
 - `*-squashfs-factory.img.gz` or `*-ext4-factory.img.gz` for a fresh SD card.
 - `*-sysupgrade.img.gz` for an existing unit.
