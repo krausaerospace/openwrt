@@ -64,14 +64,15 @@ bump may include breaking changes. The first two releases were originally
 tagged by date: `starlinkpnt-2026.09.10` is `kha-v0.1.0` and `kha-2026.09.18`
 is `kha-v0.2.0`. The old tags still exist and point at the same commits.
 
-Each release carries both variants:
-
-- `*-squashfs-factory.img.gz` or `*-ext4-factory.img.gz` for a fresh SD card.
-- `*-sysupgrade.img.gz` for an existing unit.
-- The `.manifest` package list for each variant, and `sha256sums`.
-
+Each release carries only the `*-squashfs-factory.img.gz` image for each
+variant, to write to a fresh SD card. Its SHA-256 is in the release notes.
 Pick `openwrt-base-...` for a plain router and `openwrt-pnt-...` for a Starlink
-PNT kit. A unit can move between variants with a sysupgrade.
+PNT kit.
+
+Sysupgrade and ext4 images are not published. `sysupgrade` on a running unit
+rejects the factory image because it has no sysupgrade metadata, so to upgrade
+a unit in place, or to move it between variants, build from the release tag
+and use the `*-squashfs-sysupgrade.img.gz` from `bin/targets/bcm27xx/bcm2712/`.
 
 ## Network defaults
 
