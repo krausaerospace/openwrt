@@ -1,0 +1,15 @@
+#!/bin/sh
+# rtspforwarder 2.x runs GStreamer instead of ffmpeg. Drop the ffmpeg-only
+# options a unit upgraded from 1.x still has in /etc/config/rtspforwarder
+# (sysupgrade keeps that file), and map the ffmpeg-only log levels.
+# Harmless on a fresh image. Maintained in the buildroot repo at
+# package/kha/rtspforwarder/files/etc/uci-defaults/95-rtspforwarder-gst.
+for o in fifo_size overrun_nonfatal realtime input_timeout probesize analyzeduration; do
+	uci -q delete rtspforwarder.main.$o
+done
+case "$(uci -q get rtspforwarder.main.loglevel)" in
+	quiet) uci -q set rtspforwarder.main.loglevel=error ;;
+	verbose) uci -q set rtspforwarder.main.loglevel=info ;;
+esac
+uci -q commit rtspforwarder
+exit 0

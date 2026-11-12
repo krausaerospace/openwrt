@@ -1,0 +1,13 @@
+{
+	"admin/services/rtspforwarder": {
+		"title": "RTSP Forwarder",
+		"order": 6,
+		"action": {
+			"type": "view",
+			"path": "rtspforwarder"
+		},
+		"depends": {
+			"acl": [ "luci-app-rtspforwarder" ]
+		}
+	}
+}

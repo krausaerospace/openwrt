@@ -1,0 +1,13 @@
+{
+	"admin/vpn/zerotier": {
+		"title": "ZeroTier",
+		"order": 50,
+		"action": {
+			"type": "view",
+			"path": "zerotier"
+		},
+		"depends": {
+			"acl": [ "luci-app-zerotier" ]
+		}
+	}
+}

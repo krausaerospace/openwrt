@@ -25,16 +25,19 @@ variant-neutral files, so put PNT files in the package, never in `files/`.
 
 ```
 git clone https://github.com/krausaerospace/openwrt.git && cd openwrt
+./build.sh             # builds both variants: base, then pnt
 ./build.sh base        # or: ./build.sh pnt
-./build.sh             # reuses the last variant
+./build.sh all -j8     # both, with extra make args
 ./build.sh pnt package/starlinkpnt/compile    # extra args go to make
+./build.sh package/starlinkpnt/compile        # make args only: reuses the last variant
 ```
 
 On a fresh clone `build.sh` bootstraps the feeds and seeds `.config` from
 `config.seed`, plus `config-pnt.seed` for `pnt`. Switching variants needs no
 clean: compiled packages stay cached and only the root filesystem and images
-are rebuilt, so both variants' images sit side by side in
-`bin/targets/bcm27xx/bcm2712/`.
+are rebuilt. Each variant's images end up in its own folder,
+`bin/targets/bcm27xx/bcm2712/base/` and `bin/targets/bcm27xx/bcm2712/pnt/`,
+each with its own `sha256sums`; `packages/` stays shared at the top level.
 
 A re-seed replaces `.config`. It happens when there is no `.config`, when the
 variant changes, or when a seed file is newer than `.config`. The previous
@@ -72,7 +75,7 @@ PNT kit.
 Sysupgrade and ext4 images are not published. `sysupgrade` on a running unit
 rejects the factory image because it has no sysupgrade metadata, so to upgrade
 a unit in place, or to move it between variants, build from the release tag
-and use the `*-squashfs-sysupgrade.img.gz` from `bin/targets/bcm27xx/bcm2712/`.
+and use the `*-squashfs-sysupgrade.img.gz` from `bin/targets/bcm27xx/bcm2712/<variant>/`.
 
 ## Network defaults
 
@@ -83,6 +86,10 @@ and use the `*-squashfs-sysupgrade.img.gz` from `bin/targets/bcm27xx/bcm2712/`.
   on first boot, so VPN peers get the same access as wired LAN hosts. The
   separate `gcsvpn` zone that older images created is removed.
 - SSH keys are pre-provisioned, and `/root/status.sh` is the field check script.
+- Both variants include an RTSP forwarder (LuCI: Services > RTSP Forwarder)
+  that pushes the MPEG-TS stream on UDP port 15004, video and KLV together,
+  to an RTSP server with GStreamer. It stays idle until an endpoint URL is
+  saved. See IMAGE-CHANGES.md.
 
 ---
 

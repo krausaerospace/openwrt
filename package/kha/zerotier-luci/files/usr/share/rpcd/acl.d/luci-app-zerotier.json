@@ -1,0 +1,17 @@
+{
+	"luci-app-zerotier": {
+		"description": "Grant access to the ZeroTier page",
+		"read": {
+			"ubus": {
+				"luci.zerotier": [ "status" ]
+			},
+			"uci": [ "zerotier" ]
+		},
+		"write": {
+			"ubus": {
+				"luci.zerotier": [ "action" ]
+			},
+			"uci": [ "zerotier" ]
+		}
+	}
+}

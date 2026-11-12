@@ -1,0 +1,119 @@
+#!/bin/sh /etc/rc.common
+# MPEG-TS over UDP -> RTSP forwarder. Maintained in the buildroot repo at
+# package/kha/rtspforwarder/files/etc/init.d/rtspforwarder.
+#
+# Runs, with the values from /etc/config/rtspforwarder:
+#   gst-launch-1.0 -e \
+#     udpsrc address=IP port=PORT buffer-size=BYTES \
+#       caps="video/mpegts,systemstream=(boolean)true,packetsize=(int)188" \
+#     ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=NS \
+#     ! tsparse set-timestamps=true \
+#     ! rtspclientsink location="URL" protocols=tcp
+# The whole transport stream (video, KLV metadata and anything else in it)
+# is sent untouched as one RTP stream (MP2T payload).
+# Controlled from LuCI (Services > RTSP Forwarder) or with
+# /etc/init.d/rtspforwarder start|stop|restart.
+#
+# The image build enables every init script, so boot() gates the boot-time
+# start on rtspforwarder.main.autostart. With no URL set nothing is started.
+
+START=99
+STOP=10
+USE_PROCD=1
+
+NAME=rtspforwarder
+# Symlink to /usr/bin/gst-launch-1.0: procd names log lines after argv[0].
+PROG=/usr/libexec/rtspforwarder
+
+isnum() {
+	case "$1" in
+		''|*[!0-9]*) return 1 ;;
+	esac
+	return 0
+}
+
+boot() {
+	local autostart
+	config_load "$NAME"
+	config_get_bool autostart main autostart 1
+	if [ "$autostart" = 1 ]; then
+		start "$@"
+	else
+		logger -t "$NAME" "autostart is off; start it from LuCI (Services > RTSP Forwarder)"
+	fi
+}
+
+start_service() {
+	local url listen_ip listen_port buffer_size queue_time transport
+	local loglevel delay gst_debug
+
+	config_load "$NAME"
+	config_get url main url ''
+	config_get listen_ip main listen_ip '0.0.0.0'
+	config_get listen_port main listen_port '15004'
+	config_get buffer_size main buffer_size '4194304'
+	config_get queue_time main queue_time '2000'
+	config_get transport main rtsp_transport 'tcp'
+	config_get loglevel main loglevel 'warning'
+	config_get delay main respawn_delay '5'
+
+	# The URL goes into the pipeline description inside double quotes, so
+	# it must not contain quotes, backslashes or whitespace.
+	case "$url" in
+		'')
+			logger -t "$NAME" "no RTSP endpoint URL set; not starting"
+			return 0 ;;
+		*[\"\\\ \	]*)
+			logger -t "$NAME" "RTSP endpoint URL contains spaces, quotes or backslashes; not starting"
+			return 1 ;;
+		rtsp://?*|rtsps://?*) ;;
+		*)
+			logger -t "$NAME" "RTSP endpoint URL must start with rtsp:// or rtsps://; not starting"
+			return 1 ;;
+	esac
+	case "$listen_ip" in
+		''|*[!0-9.]*) listen_ip=0.0.0.0 ;;
+	esac
+	isnum "$listen_port" || listen_port=15004
+	isnum "$buffer_size" || buffer_size=4194304
+	isnum "$queue_time" || queue_time=2000
+	case "$transport" in
+		tcp|udp) ;;
+		*) transport=tcp ;;
+	esac
+	case "$loglevel" in
+		error) gst_debug=1 ;;
+		info) gst_debug=4 ;;
+		debug) gst_debug=5 ;;
+		*) gst_debug=2 ;;
+	esac
+	isnum "$delay" || delay=5
+
+	procd_open_instance
+	procd_set_param command "$PROG" -e \
+		udpsrc address="$listen_ip" port="$listen_port" buffer-size="$buffer_size" \
+			caps="video/mpegts,systemstream=(boolean)true,packetsize=(int)188" \
+		! queue max-size-buffers=0 max-size-bytes=0 max-size-time="${queue_time}000000" \
+		! tsparse set-timestamps=true \
+		! rtspclientsink location="\"$url\"" protocols="$transport"
+	procd_set_param env GST_DEBUG="$gst_debug" GST_DEBUG_NO_COLOR=1
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	# gst-launch exits when the RTSP server drops the connection or refuses
+	# the stream; keep retrying forever (retry 0 = no crash-loop limit).
+	procd_set_param respawn 3600 "$delay" 0
+	procd_close_instance
+}
+
+# A config change (LuCI Save & Apply) applies new settings to a running
+# forwarder but never starts a stopped one. procd restarts the instance
+# when its command line changed, and drops it when the URL was cleared.
+reload_service() {
+	if service_running; then
+		start
+	fi
+}
+
+service_triggers() {
+	procd_add_reload_trigger "$NAME"
+}

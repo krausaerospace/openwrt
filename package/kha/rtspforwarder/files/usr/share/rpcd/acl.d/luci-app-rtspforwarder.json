@@ -1,0 +1,17 @@
+{
+	"luci-app-rtspforwarder": {
+		"description": "Grant access to the RTSP Forwarder page",
+		"read": {
+			"ubus": {
+				"luci.rtspforwarder": [ "status" ]
+			},
+			"uci": [ "rtspforwarder" ]
+		},
+		"write": {
+			"ubus": {
+				"luci.rtspforwarder": [ "action" ]
+			},
+			"uci": [ "rtspforwarder" ]
+		}
+	}
+}

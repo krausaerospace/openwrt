@@ -12,23 +12,24 @@ Only the Pi 5 (bcm2712) image is built. The Pi 4 (bcm2711) target that was used 
 
 | | `base` | `pnt` |
 |---|---|---|
-| Build command | `./build.sh base` | `./build.sh pnt` |
+| Build command | `./build.sh base` (or `./build.sh` for both) | `./build.sh pnt` (or `./build.sh` for both) |
 | `.config` seed | `config.seed` | `config.seed` + `config-pnt.seed` |
 | Starlink–MAVLink bridge, LuCI "Starlink PNT" page, `starlink-*` helpers | no | yes (`starlinkpnt` package) |
 | Python 3 + pip, bundled wheels | no | yes |
 | Everything else in this document | yes | yes |
-| Sysupgrade image | `openwrt-base-bcm27xx-bcm2712-rpi-5-squashfs-sysupgrade.img.gz` | `openwrt-pnt-bcm27xx-bcm2712-rpi-5-squashfs-sysupgrade.img.gz` |
+| Sysupgrade image | `base/openwrt-base-bcm27xx-bcm2712-rpi-5-squashfs-sysupgrade.img.gz` | `pnt/openwrt-pnt-bcm27xx-bcm2712-rpi-5-squashfs-sysupgrade.img.gz` |
 
-- `./build.sh base|pnt [make args]` builds the named variant. `./build.sh [make args]` with no variant reuses the last one (recorded in `tmp/.build-variant`); with no variant and no record it exits with a usage error.
+- `./build.sh` with no arguments builds both variants, `base` then `pnt`, and stops at the first failure. `./build.sh all [make args]` does the same with make args. `./build.sh base|pnt [make args]` builds the named variant. `./build.sh [make args]` with no variant reuses the last one (recorded in `tmp/.build-variant`); with no variant and no record it exits with a usage error. A bare `./build.sh` used to rebuild the last variant only.
 - On a fresh clone `build.sh` bootstraps the feeds, then seeds `.config` from `config.seed` (base) plus `config-pnt.seed` (pnt only) and runs `make defconfig`.
 - `build.sh` re-seeds when there is no `.config`; when the recorded variant differs from the requested one, which includes a missing `tmp/.build-variant` (the first run of this `build.sh` in an existing tree, or after `make dirclean` / `rm -rf tmp`); or when a seed file is newer than `.config` (a `git checkout` or pull that touches a seed triggers this). It prints the reason for the re-seed.
-- A re-seed replaces `.config`: menuconfig changes that were never written back to a seed are dropped. The previous `.config` is always kept as a timestamped backup, `tmp/.config.before-reseed.<YYYYmmdd-HHMMSS>`, which never overwrites an earlier backup; `build.sh` prints its path. To keep a hand-tuned change permanently, fold it into `config.seed` (see below).
+- A re-seed replaces `.config`: menuconfig changes that were never written back to a seed are dropped. A bare `./build.sh` switches variant twice per run, so it re-seeds every time. The previous `.config` is always kept as a timestamped backup, `tmp/.config.before-reseed.<YYYYmmdd-HHMMSS>`, which never overwrites an earlier backup; `build.sh` prints its path. To keep a hand-tuned change permanently, fold it into `config.seed` (see below).
 - `tmp/.build-variant` is removed before seeding and written again only after the variant assertion below passes, so a failed or interrupted `make defconfig`, or a failed assertion, always forces a clean re-seed on the next run.
 - After resolving the config, `build.sh` asserts the variant: `pnt` must have `starlinkpnt` and `python3` selected; `base` must have neither.
 - `config.seed` is the base diffconfig. `config-pnt.seed` is one hand-maintained line, `CONFIG_PACKAGE_starlinkpnt=y`; python3, python3-pip, rpcd, rpcd-mod-ucode, ucode-mod-uci/ubus/fs and luci-base come in through the package's dependencies. To refresh the base seed: `./build.sh base`, `make menuconfig`, then `./scripts/diffconfig.sh > config.seed`. Never run diffconfig from a pnt `.config`.
 - `build.sh` passes `EXTRA_IMAGE_NAME=<variant>` to make, so every image filename carries the variant: `openwrt-base-…` / `openwrt-pnt-…` for the `-squashfs-` and `-ext4-` images, both `-sysupgrade` and `-factory`. The `.manifest` is tagged the same way.
-- `sha256sums`, `profiles.json` and `config.buildinfo` reflect only the last build (`profiles.json` is deleted before each full build, including explicit `world`/`all` goals, so it does not merge variants).
-- No clean is needed between variants: the rootfs is wiped and re-populated from `.config` on every build, and compiled packages stay cached, so both variants' images coexist in `bin/targets/bcm27xx/bcm2712/`.
+- After each build, `build.sh` moves that variant's `openwrt-<variant>-*` files (images, `.manifest`, SBOM) out of `bin/targets/bcm27xx/bcm2712/` into its own subfolder, `bin/targets/bcm27xx/bcm2712/base/` or `bin/targets/bcm27xx/bcm2712/pnt/`, overwriting files of the same name. After a full build it also moves `profiles.json` and the `*.buildinfo` files there and deletes the top-level `sha256sums`, which listed the moved files. Each subfolder gets its own `sha256sums` covering every file in it. `packages/` stays at the top level: both variants' images are assembled from that one package feed.
+- `profiles.json` is deleted before each full build, including explicit `world`/`all` goals, so it does not merge variants. A partial build (for example `./build.sh pnt package/starlinkpnt/compile`) only moves image files, if any were produced.
+- No clean is needed between variants: the rootfs is wiped and re-populated from `.config` on every build, and compiled packages stay cached.
 - The shared top-level `files/` overlay holds only variant-neutral files and is copied into every image. PNT files belong in the `starlinkpnt` package, never in `files/`.
 
 ## Hardware Changes
@@ -38,10 +39,12 @@ Only the Pi 5 (bcm2712) image is built. The Pi 4 (bcm2711) target that was used 
 ## Extra Software Included (both variants, beyond stock defaults)
 
 - Full GStreamer 1.x stack with RTSP client/server modules (including a `gst1-rtsp-server` package not in stock OpenWrt), V4L2 codecs, and camera support; ffmpeg.
-- ZeroTier and Tailscale (GCS VPN paths), WireGuard, and OpenVPN with the LuCI OpenVPN app (CloudConnexa).
+- Built with `CONFIG_BUILD_PATENTED=y` ("Compile with support for patented functionality", off in stock OpenWrt), set in `config.seed` so both variants keep it. Packages with optional patented features, such as the media encoders and decoders, are built with them enabled instead of having them stripped.
+- ZeroTier (with a LuCI page, see "ZeroTier LuCI Page") and Tailscale (GCS VPN paths), WireGuard, and OpenVPN with the LuCI OpenVPN app (CloudConnexa).
 - IPsec: strongSwan 6 (`strongswan-default` plugin set plus the OpenSSL crypto backend, AES-GCM, and EAP-Identity/EAP-MSCHAPv2 for IKEv2 username logins), configured through `swanctl`, with the kernel IPsec modules (kmod-ipsec, kmod-ipsec4, kmod-ipsec6), route-based `xfrm` tunnel interfaces (kmod-xfrm-interface, luci-proto-xfrm) and the LuCI strongSwan page (luci-app-strongswan-swanctl, swanmon). No connections are preconfigured; peers are defined per deployment.
 - `strongswan-charon-cmd` (the `charon-cmd` command-line IKE client, for one-off roadwarrior connections without a swanctl config) and the `kdf` plugin.
 - `ip-full` replaces the stock `ip-tiny`, so the complete `ip` command set (including `ip xfrm` for inspecting IPsec state and policies) is available.
+- `/usr/libexec/gstreamer-1.0/gst-plugin-scanner` is a symlink to `/usr/lib/gstreamer-1.0/gst-plugin-scanner` (shipped in the `files/` overlay). The OpenWrt `libgstreamer1` package installs the scanner under `/usr/lib`, but GStreamer looks for it under `/usr/libexec`. Without the link every `gst-launch-1.0` that rebuilds the plugin registry warns "External plugin loader failed" and loads all plugins in-process.
 - LuCI web interface with firewall and package-manager apps.
 - USB network drivers (cdc-ether, rndis, smsc95xx) and ethtool for the USB NIC ports.
 
@@ -59,8 +62,46 @@ Only the Pi 5 (bcm2712) image is built. The Pi 4 (bcm2711) target that was used 
 ## Operations / Field Support
 
 - `/root/status.sh`: non-interactive field verification script that checks WAN state and jack roles, default route and internet reachability, and ZeroTier, and warns when the clock is not set. It is generic and contains no PNT text.
-- `status.sh` sources drop-in sections from `/usr/share/kha-status.d/*.sh` in lexical order, so a package can add its own checks without editing the script. The base image ships no drop-ins.
+- `status.sh` sources drop-in sections from `/usr/share/kha-status.d/*.sh` in lexical order, so a package can add its own checks without editing the script. Both variants ship `40-rtspforwarder.sh` (see below); `pnt` adds `50-starlinkpnt.sh`.
 - Pre-provisioned SSH: authorized keys are baked into the image.
+
+## RTSP Forwarder (both variants)
+
+The `rtspforwarder` package (`package/kha/rtspforwarder`, selected in `config.seed`) pushes an MPEG-TS stream received over UDP to an RTSP server with GStreamer. The whole transport stream is sent untouched as one RTP stream (MP2T payload), so the video, KLV metadata and anything else in it reach the server together. With the shipped settings and an endpoint URL set, it runs:
+
+```
+gst-launch-1.0 -e \
+  udpsrc address=0.0.0.0 port=15004 buffer-size=4194304 \
+    caps="video/mpegts,systemstream=(boolean)true,packetsize=(int)188" \
+  ! queue max-size-buffers=0 max-size-bytes=0 max-size-time=2000000000 \
+  ! tsparse set-timestamps=true \
+  ! rtspclientsink location="<url>" protocols=tcp
+```
+
+- LuCI page under Services > RTSP Forwarder. The top of the page shows whether the forwarder is running, the saved endpoint, the exact running command line and the last 40 log lines, with Start / Stop / Restart buttons. The General tab holds the RTSP endpoint URL (empty by default) and "Start at boot". The Advanced tab holds the listen IP (`0.0.0.0`, every interface), UDP port (`15004`), receive buffer (4194304 bytes), queue (2000 ms), RTSP transport (TCP), restart delay (5 s) and the GStreamer log level (warning, set through `GST_DEBUG`).
+- With the default listen IP `0.0.0.0` the forwarder accepts the UDP stream on every interface. The firewall still applies: senders on the LAN and on the VPNs in the LAN zone (ZeroTier, Tailscale, CloudConnexa) reach UDP 15004, while the WAN zone rejects input, so a sender on the WAN side needs a firewall rule. Set `127.0.0.1` to accept only streams generated on the router itself.
+- Settings live in uci `/etc/config/rtspforwarder` (a conffile), so they persist across reboots and are kept by sysupgrade.
+- The forwarder is a procd service, `/etc/init.d/rtspforwarder start|stop|restart`. It does nothing until an endpoint URL is saved; the URL must start with `rtsp://` or `rtsps://` and must not contain spaces, quotes or backslashes. "Start at boot" ships on, so once a URL is saved the forwarder starts on every boot. Turn it off on the page to start it by hand only.
+- procd restarts the pipeline whenever it exits (for example when the RTSP server drops the connection or refuses the stream), after the restart delay and with no retry limit.
+- Save & Apply on the page restarts a running forwarder with the new settings. It never starts a stopped one, and clearing the URL stops it.
+- Stopping sends SIGTERM, which ends `gst-launch-1.0` without an RTSP TEARDOWN; the server sees the TCP connection close instead.
+- `gst-launch-1.0` runs as `/usr/libexec/rtspforwarder`, a symlink to `/usr/bin/gst-launch-1.0`, so its syslog lines are tagged `rtspforwarder[pid]`. `logread -e rtspforwarder` shows them.
+- `/root/status.sh` prints an "RTSP forwarder" section: endpoint, service state and the last log lines.
+- The package depends on `gstreamer1-utils` (`gst-launch-1.0`), `gst1-mod-udp`, `gst1-mod-mpegtsdemux` (`tsparse`), `gst1-mod-rtp` (`rtpmp2tpay`, picked automatically by `rtspclientsink`), `gst1-mod-rtpmanager` and `gst1-mod-rtspclientsink`.
+- Version 1.x of the package ran ffmpeg (`-c copy -f rtsp`). ffmpeg drops the KLV stream: its RTSP output sends each stream as separate RTP, and its RTP muxer has no KLV support. `/etc/uci-defaults/95-rtspforwarder-gst` removes the ffmpeg-only options (`fifo_size`, `overrun_nonfatal`, `realtime`, `input_timeout`, `probesize`, `analyzeduration`) from a config kept by sysupgrade and maps the `quiet`/`verbose` log levels to `error`/`info`. The new options (`buffer_size`, `queue_time`) take their defaults until saved from the page.
+
+## ZeroTier LuCI Page (both variants)
+
+Stock OpenWrt has no LuCI page for ZeroTier: the LuCI feed carries no ZeroTier app, so it is configured by editing `/etc/config/zerotier` over SSH. This image adds one with the `zerotier-luci` package (`package/kha/zerotier-luci`, selected in `config.seed`).
+
+- LuCI page under VPN > ZeroTier, delivered as the view `/www/luci-static/resources/view/zerotier.js`, the rpcd ucode backend `/usr/share/rpcd/ucode/zerotier.uc` (ubus object `luci.zerotier`), an ACL grant (`luci-app-zerotier`) and a menu entry.
+- The status section refreshes every 5 seconds. It shows the service state (running, stopped or disabled), this router's ZeroTier node ID (the ID to authorize on the network controller), whether the node is online (with a note when it is on the TCP relay fallback), the ZeroTier version and UDP port, and the last 30 ZeroTier log lines. It has Start / Stop / Restart buttons. Start and Restart refuse while ZeroTier is disabled in uci.
+- The joined-networks table lists each network's ID, name, status (an `ACCESS_DENIED` network says to authorize the node on the controller), interface with its UP/DOWN state, assigned addresses and type. A ZeroTier interface that is DOWN drops traffic without any error, the same condition `/root/status.sh` checks for.
+- The peers table lists network members first, then the ZeroTier roots, each with its active direct path ("relayed" when there is none), latency and version.
+- The settings form edits the stock `/etc/config/zerotier`: Enable and listen port (`zerotier.global`), and a table of networks to join, each with its 16-digit ID and the controller permissions Managed IPs (default on), Global IPs, Default route and DNS (default off). Removing a network from the table makes the router leave it. The identity secret is not shown on the page.
+- Save & Apply restarts ZeroTier through the stock init script's uci reload trigger, which briefly drops every ZeroTier connection, including a LuCI session reached over ZeroTier.
+- The form rejects the public "Earth" network (`8056c2e21c000001`). The stock `zerotier` package ships that network in its default config (disabled). On this image `zt+` is in the LAN zone, so joining Earth would give every Earth member full LAN access. On a router still carrying the stock config, the Earth entry is flagged and must be removed or replaced before the form saves.
+- The stock `zerotier` package and its init script are unchanged.
 
 ## `pnt` Variant Only
 
@@ -106,4 +147,4 @@ Networking and installation are automatic on first boot; the bridge itself is st
 
 ## Source
 
-The image is built from the krausaerospace/openwrt fork (based on OpenWrt v25.12.5). The repository is self-contained: a fresh clone plus `./build.sh base` or `./build.sh pnt` reproduces the corresponding image.
+The image is built from the krausaerospace/openwrt fork (based on OpenWrt v25.12.5). The repository is self-contained: a fresh clone plus `./build.sh` reproduces both images (`./build.sh base` or `./build.sh pnt` for one).
